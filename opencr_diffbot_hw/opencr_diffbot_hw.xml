@@ -1,0 +1,11 @@
+<?xml version="1.0"?>
+<library path="opencr_diffbot_hw">
+  <class
+    name="opencr_diffbot_hw/OpenCRSystem"
+    type="opencr_diffbot_hw::OpenCRSystem"
+    base_class_type="hardware_interface::SystemInterface">
+    <description>
+      ros2_control SystemInterface plugin that communicates with OpenCR over serial.
+    </description>
+  </class>
+</library>

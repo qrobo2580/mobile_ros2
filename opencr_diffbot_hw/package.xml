@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>opencr_diffbot_hw</name>
+  <version>0.0.0</version>
+  <description>ros2_control hardware interface for OpenCR over serial (diff_drive_controller)</description>
+  <maintainer email="you@example.com">you</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <!-- Core ROS 2 -->
+  <depend>rclcpp</depend>
+
+  <!-- ros2_control hardware interface -->
+  <depend>hardware_interface</depend>
+  <depend>pluginlib</depend>
+
+  <!-- For exporting plugins -->
+  <depend>rclcpp_lifecycle</depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
