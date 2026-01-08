@@ -121,6 +121,22 @@ namespace opencr_diffbot_hw
         state_interfaces.emplace_back(
             right_joint_name_, hardware_interface::HW_IF_VELOCITY, &vel_[1]);
 
+
+        // ---- IMU sensor state interfaces (for imu_sensor_broadcaster) ----
+        state_interfaces.emplace_back("imu", "angular_velocity.x", &imu_gx_);
+        state_interfaces.emplace_back("imu", "angular_velocity.y", &imu_gy_);
+        state_interfaces.emplace_back("imu", "angular_velocity.z", &imu_gz_);
+        state_interfaces.emplace_back("imu", "linear_acceleration.x", &imu_ax_);
+        state_interfaces.emplace_back("imu", "linear_acceleration.y", &imu_ay_);
+        state_interfaces.emplace_back("imu", "linear_acceleration.z", &imu_az_);
+        // "imu" is sensor name in controller.yaml file.
+        state_interfaces.emplace_back("imu", "orientation.x", &imu_qx_);
+        state_interfaces.emplace_back("imu", "orientation.y", &imu_qy_);
+        state_interfaces.emplace_back("imu", "orientation.z", &imu_qz_);
+        state_interfaces.emplace_back("imu", "orientation.w", &imu_qw_);
+
+
+
         return state_interfaces;
     }
 
@@ -150,8 +166,15 @@ namespace opencr_diffbot_hw
             if (!read_line_(line)) {
             break;  // 더 이상 완전한 한 줄이 없음
             }
+
             // line에는 '\n' 없이 들어오도록 구현할 예정
-            (void)parse_state_line_(line);
+               if (!line.empty()) {
+                if (line.rfind("S1 ", 0) == 0 || line.rfind("S ", 0) == 0) {
+                    (void)parse_state_line_(line);
+                } else if (line.rfind("I1 ", 0) == 0 || line.rfind("I ", 0) == 0) {
+                    (void)parse_imu_line_(line);
+                }
+            }
         }
 
         return hardware_interface::return_type::OK;
@@ -299,7 +322,6 @@ namespace opencr_diffbot_hw
             if (line.empty() || line[0] != 'S') {
                 return false;
         }
-        
 
         // 가장 필요한 값: w1, w2, pos1, pos2
         // ticks/pwm은 일단 사용 안 함(필요하면 나중에 확장)
@@ -308,10 +330,18 @@ namespace opencr_diffbot_hw
         long t1 = 0, t2 = 0;
         int pwm1 = 0, pwm2 = 0;
 
-        const int ret = std::sscanf(
+
+        int ret = std::sscanf(
             line.c_str(),
-            "S %ld %lf %lf %lf %lf %ld %ld %d %d",
+            "S1 %ld %lf %lf %lf %lf %ld %ld %d %d",
             &ms, &w1, &w2, &p1, &p2, &t1, &t2, &pwm1, &pwm2);
+
+        if (ret < 5) {
+            ret = std::sscanf(
+                line.c_str(),
+                "S %ld %lf %lf %lf %lf %ld %ld %d %d",
+                &ms, &w1, &w2, &p1, &p2, &t1, &t2, &pwm1, &pwm2);
+        }
 
         if (ret < 5) {
             // 최소 w1,w2,pos1,pos2까지 못 읽으면 실패
@@ -329,6 +359,109 @@ namespace opencr_diffbot_hw
 
         return true;
     }
+
+
+
+
+    bool OpenCRSystem::parse_imu_line_(const std::string & line)
+    {
+        // OpenCR IMU 출력 포맷(펌웨어 기준):
+        // I1 ms gx gy gz ax ay az
+        long ms = 0;
+        double gx=0, gy=0, gz=0, ax=0, ay=0, az=0;
+
+        int ret = std::sscanf(line.c_str(), "I1 %ld %lf %lf %lf %lf %lf %lf",
+                            &ms, &gx, &gy, &gz, &ax, &ay, &az);
+
+        if (ret < 7) {
+            ret = std::sscanf(line.c_str(), "I %ld %lf %lf %lf %lf %lf %lf",
+                            &ms, &gx, &gy, &gz, &ax, &ay, &az);
+        }
+        if (ret < 7) return false;
+
+        imu_gx_ = gx; imu_gy_ = gy; imu_gz_ = gz;
+        imu_ax_ = ax; imu_ay_ = ay; imu_az_ = az;
+
+
+        // ============================================================
+        // (1) Integrate yaw from gyro z  (yaw += wz * dt)
+        // ============================================================
+        if (!imu_has_last_ms_) {
+            imu_has_last_ms_ = true;
+            imu_last_ms_ = ms;
+        } else {
+            const double dt = (static_cast<double>(ms - imu_last_ms_)) * 1e-3; // ms -> s
+            imu_last_ms_ = ms;
+
+            // 보호: dt가 이상하면(큰 지연/역행) 적분 스킵
+            if (dt > 0.0 && dt < 0.5) {
+                imu_yaw_int_ += imu_gz_ * dt;  // rad/s * s = rad
+
+                // yaw wrap to [-pi, pi]
+                while (imu_yaw_int_ > M_PI)  imu_yaw_int_ -= 2.0 * M_PI;
+                while (imu_yaw_int_ < -M_PI) imu_yaw_int_ += 2.0 * M_PI;
+            }
+        }
+
+
+        // --- compute roll/pitch from accel (gravity direction) ---
+        // NOTE: works best when robot is not accelerating strongly.
+        // yaw is unknown -> set to 0 for now.
+        const double axn = -imu_ax_;
+        const double ayn = -imu_ay_;
+        const double azn = imu_az_;
+
+        // 보호: 0 나눗셈 방지
+        const double norm = std::sqrt(axn*axn + ayn*ayn + azn*azn);
+        if (norm > 1e-6) {
+        const double axu = axn / norm;
+        const double ayu = ayn / norm;
+        const double azu = azn / norm;
+
+        // ROS 기준(일반): x forward, y left, z up 가정
+        // roll  = atan2(ay, az)
+        // pitch = atan2(-ax, sqrt(ay^2 + az^2))
+        const double roll  = std::atan2(ayu, azu);
+        const double pitch = std::atan2(-axu, std::sqrt(ayu*ayu + azu*azu));
+        // const double yaw   = 0.0;  // cannot be determined without mag or other reference
+        const double yaw   = imu_yaw_int_;  // <-- 여기서 yaw=0이 아니라 적분 yaw 사용        
+
+
+        // RPY -> quaternion
+        const double cr = std::cos(roll  * 0.5);
+        const double sr = std::sin(roll  * 0.5);
+        const double cp = std::cos(pitch * 0.5);
+        const double sp = std::sin(pitch * 0.5);
+        const double cy = std::cos(yaw   * 0.5);
+        const double sy = std::sin(yaw   * 0.5);
+
+        imu_qw_ = cr*cp*cy + sr*sp*sy;
+        imu_qx_ = sr*cp*cy - cr*sp*sy;
+        imu_qy_ = cr*sp*cy + sr*cp*sy;
+        imu_qz_ = cr*cp*sy - sr*sp*cy;
+        } else {
+        // fallback
+        imu_qx_ = 0.0; imu_qy_ = 0.0; imu_qz_ = 0.0; imu_qw_ = 1.0;
+        }
+
+
+
+
+
+        // // 아직 펌웨어에서 quaternion을 안 보내면, 임시로 identity quaternion 유지
+        // imu_qx_ = 0.0;
+        // imu_qy_ = 0.0;
+        // imu_qz_ = 0.0;
+        // imu_qw_ = 1.0;
+
+        return true;
+    }
+
+
+
+
+
+
 
     bool OpenCRSystem::write_cmd_(double w1_radps, double w2_radps)
     {

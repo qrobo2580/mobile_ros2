@@ -48,6 +48,19 @@ private:
   std::vector<double> pos_;   // size 2
   std::vector<double> vel_;   // size 2
 
+
+  // ----- IMU State -----
+  // 단위: rad/s, m/s^2
+  double imu_gx_{0.0}, imu_gy_{0.0}, imu_gz_{0.0};
+  double imu_ax_{0.0}, imu_ay_{0.0}, imu_az_{0.0};
+  // ---- IMU orientation (quaternion) ----
+  double imu_qx_{0.0}, imu_qy_{0.0}, imu_qz_{0.0}, imu_qw_{1.0};
+
+  // --- yaw integration (for RViz IMU orientation visualization) ---
+  bool imu_has_last_ms_{false};
+  long imu_last_ms_{0};
+  double imu_yaw_int_{0.0};  // integrated yaw [rad]
+
   // ----- Command (velocity[rad/s]) -----
   std::vector<double> cmd_vel_;  // size 2
 
@@ -64,6 +77,7 @@ private:
   void close_serial_();
   bool read_line_(std::string & line_out);
   bool parse_state_line_(const std::string & line);
+  bool parse_imu_line_(const std::string & line);
   bool write_cmd_(double w1_radps, double w2_radps);
 
 

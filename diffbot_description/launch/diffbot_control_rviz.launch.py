@@ -71,6 +71,18 @@ def generate_launch_description():
         output="screen",
         parameters=[robot_description, {"use_sim_time": use_sim_time}],
     )
+    
+    # -------- robot_localization  --------
+    # 
+    ekf_node = Node(
+        package="robot_localization",
+        executable="ekf_node",
+        name="ekf_filter_node",
+        output="screen",
+        parameters=[PathJoinSubstitution([pkg_share, "config", "ekf.yaml"])],
+        
+    )
+
 
     # -------- RViz2 --------
     rviz_node = Node(
@@ -95,6 +107,7 @@ def generate_launch_description():
         ),
 
         control_node,
+        ekf_node,
         jsb_spawner,
         imu_spawner,
         diff_spawner,

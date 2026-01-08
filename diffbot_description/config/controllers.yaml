@@ -28,7 +28,7 @@ diff_drive_controller:
 
     # 오도메트리 publish (필요에 따라)
     publish_rate: 50.0
-    enable_odom_tf: true
+    enable_odom_tf: false     # normally true, but this sets false because robot localization ekf is tf true used
 
     # 프레임 이름(프로젝트에 맞게)
     base_frame_id: base_link
