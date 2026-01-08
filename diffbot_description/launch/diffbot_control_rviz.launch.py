@@ -44,6 +44,15 @@ def generate_launch_description():
         arguments=["joint_state_broadcaster", "--controller-manager", "/controller_manager"],
         output="screen",
     )
+    
+    # -------- imu_sensor_broadcaster spawner --------
+    imu_spawner = Node(
+        package="controller_manager",
+        executable="spawner",
+        arguments=["imu_broadcaster", "--controller-manager", "/controller_manager"],
+        output="screen",
+    )
+    
 
     # -------- diff_drive_controller spawner --------
     diff_spawner = Node(
@@ -87,6 +96,7 @@ def generate_launch_description():
 
         control_node,
         jsb_spawner,
+        imu_spawner,
         diff_spawner,
         rsp_node,
         rviz_node,

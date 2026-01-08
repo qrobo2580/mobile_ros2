@@ -8,6 +8,10 @@ controller_manager:
     diff_drive_controller:
       type: diff_drive_controller/DiffDriveController
 
+    imu_broadcaster:
+      type: imu_sensor_broadcaster/IMUSensorBroadcaster
+
+
 diff_drive_controller:
   ros__parameters:
     # ---- 바퀴 조인트 이름: URDF와 반드시 일치 ----
@@ -32,3 +36,9 @@ diff_drive_controller:
 
     # 기본적으로 cmd_vel 토픽을 사용
     use_stamped_vel: false
+
+
+imu_broadcaster:
+  ros__parameters:
+    sensor_name: imu
+    frame_id: imu_link
